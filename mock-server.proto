@@ -1,0 +1,26 @@
+// See README.txt for information and build instructions.
+package tools;
+
+option java_package = "com.example.tutorial";
+option java_outer_classname = "AddressBookProtos";
+
+option cc_generic_services = true;
+option java_generic_services = true;
+
+message Request {
+  optional string message = 1;
+}
+
+message Response {
+  optional string message = 1;
+  optional string host = 2;
+}
+
+service MockServer {
+  rpc Query(Request) returns(Response) {
+  }
+  rpc Update(Request) returns(Response) {
+  }
+  rpc Delete(Request) returns(Response) {
+  }
+}
