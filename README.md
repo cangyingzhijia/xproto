@@ -1,3 +1,16 @@
+# xproto Introduction
+
+xproto was a long time ago to write a small library, and then to solve the problem of bad data protobuf format printing.
+
+protobuf used in server storage, rpc sequence and so, because of its high performance, ease of use, data scalability, and other characteristics and therefore used very widely, 
+but in the development and testing process protobuf is not easy to print binary data show, while many scene rpc using protobuf, and display layers using json, xml, etc., 
+which use more web format, if the flexibility to switch between data and protobuf json, xml and other formats would be more convenient.
+
+Based on this consideration, think if you really can achieve these free conversion between text and protobuf so in development is helpful, 
+therefore protobuf depth study, we found that can achieve these functions through protobuf reflection mechanism. 
+So I try to use two days spare time to realize this idea, also appeared xproto this small library. 
+Sneaky later reference it in their daily work, we have been used up to now, I have worked in teams to get a lot of use.
+
 # xproto介绍
 xproto是很久之前就写的一个小类库了，那时候是为了解决protobuf格式的数据不好打印的问题。
 
