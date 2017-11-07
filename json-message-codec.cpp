@@ -19,13 +19,14 @@
 //
 #include "xproto/json-message-codec.h"
 
+#include <ctype.h>
 #include <sstream>
 #include <cstring>
 #include <google/protobuf/descriptor.h>
 #include <boost/algorithm/string.hpp>
 
 #include "common/utility/lexical-cast.h"
-#include "xproto/define.h"
+#include "tools/xproto/define.h"
 
 namespace xproto {
 
@@ -33,91 +34,102 @@ using namespace std;  // NOLINT
 using namespace google::protobuf;  // NOLINT
 
 #define JSON_GET(reflection, message, descriptor, TYPE, out) \
-do {\
-  if (descriptor->label() == FieldDescriptor::LABEL_REPEATED) {\
+do{\
+  if (descriptor->label() == FieldDescriptor::LABEL_REPEATED)\
+  {\
     out += "[" ;\
     int size = reflection->FieldSize(message, descriptor);\
     int i = 0; \
-    for (; i< size - 1; ++i) {\
-      out += lexical_cast<string>(reflection->GetRepeated##TYPE (message, descriptor, i));\
+    for (; i< size - 1; ++i)\
+    {\
+      out += std::to_string(reflection->GetRepeated##TYPE (message, descriptor, i));\
       out += ",";\
     }\
-    if ( i == size - 1){\
-      out += lexical_cast<string>(reflection->GetRepeated##TYPE (message, descriptor, i)); \
+    if( i == size - 1){\
+      out += std::to_string(reflection->GetRepeated##TYPE (message, descriptor, i)); \
     }\
     out += "]" ;\
-  } else {\
-    out += lexical_cast<string>(reflection->Get##TYPE (message, descriptor));\
+  }else {\
+    out += std::to_string(reflection->Get##TYPE (message, descriptor));\
   }\
-} while (0)
+}while(0)
 
 #define JSON_SET_INTERGER(reflection, message, descriptor, TYPE, CASTTYPE, CVTF, data, i) \
-do {\
-  if (descriptor->label() == FieldDescriptor::LABEL_REPEATED) {\
-    if (data[i] != '[') { /*不是json数组*/ \
-      FCOUT("json字符串不是一个有效的数组:field_name=%s, json=%s",\
-            descriptor->name().c_str(), data + i);\
-      return false;\
-    }\
-    ++i; /*跳过'['*/\
-    while (data[i]) { \
-      char *nptr = data + i;\
-      char *endptr = NULL;\
-      CASTTYPE to_value = CVTF(nptr, &endptr, 10);\
-      i += (endptr - nptr);\
-      reflection->Add##TYPE(message, descriptor, to_value);\
-      if (*endptr == ',') {\
-        ++i;\
-      } else if(*endptr == ']') {\
-        ++i;\
-        break;\
+    do {\
+      if (descriptor->label() == FieldDescriptor::LABEL_REPEATED) {\
+        if (data[i] != '[') {/*不是json数组*/ \
+          FCOUT("json字符串不是一个有效的数组:field_name=%s, json=%s",\
+                descriptor->name().c_str(), data + i);\
+          return false;\
+        }\
+        ++i; /*跳过'['*/\
+        while (data[i]) { \
+          char *nptr = data + i;\
+          char *endptr = NULL;\
+          CASTTYPE to_value = CVTF(nptr, &endptr, 10);\
+          i += (endptr - nptr);\
+          reflection->Add##TYPE(message, descriptor, to_value);\
+          if(*endptr == ',')\
+          {\
+            ++i;\
+          }else if(*endptr == ']'){\
+            ++i;\
+            break;\
+          }else {\
+            FCOUT("不是一个有效的整数:%s", nptr);\
+            return false;\
+          }\
+        }\
       } else {\
-        FCOUT("不是一个有效的整数:%s", nptr);\
-        return false;\
+        char *nptr = data + i;\
+        char *endptr = NULL;\
+        CASTTYPE to_value = CVTF(nptr, &endptr, 10);\
+        i += (endptr - nptr);\
+        reflection->Set##TYPE(message, descriptor, to_value);\
       }\
-    }\
-  } else {\
-    char *nptr = data + i;\
-    char *endptr = NULL;\
-    CASTTYPE to_value = CVTF(nptr, &endptr, 10);\
-    i += (endptr - nptr);\
-    reflection->Set##TYPE(message, descriptor, to_value);\
-  }\
-} while (0)
+      while (data[i] && data[i] == '.') {\
+        /* float point */ \
+        i++; \
+        while (data[i] && isalnum(data[i])) { \
+          i++;\
+        }\
+      } \
+    } while (0)
 
 #define JSON_SET_FLOAT(reflection, message, descriptor, TYPE, CASTTYPE, CVTF, data, i) \
-do {\
-  if (descriptor->label() == FieldDescriptor::LABEL_REPEATED) {\
-    if (data[i] != '[') { /*不是json数组*/ \
-      FCOUT("json字符串不是一个有效的数组:field_name=%s, json=%s",\
-            descriptor->name().c_str(), data + i);\
-      return false;\
-    }\
-    ++i; /*跳过'['*/\
-    while (data[i]) { \
-      char *nptr = data + i;\
-      char *endptr = NULL;\
-      CASTTYPE to_value = CVTF(nptr, &endptr);\
-      i += (endptr - nptr);\
-      reflection->Add##TYPE(message, descriptor, to_value);\
-      if (*endptr == ',') {\
-        ++i;\
-      } else if(*endptr == ']') {\
-        ++i;\
-        break;\
+    do {\
+      if (descriptor->label() == FieldDescriptor::LABEL_REPEATED) {\
+        if (data[i] != '[') {/*不是json数组*/ \
+          FCOUT("json字符串不是一个有效的数组:field_name=%s, json=%s",\
+                descriptor->name().c_str(), data + i);\
+          return false;\
+        }\
+        ++i; /*跳过'['*/\
+        while (data[i]) { \
+          char *nptr = data + i;\
+          char *endptr = NULL;\
+          CASTTYPE to_value = CVTF(nptr, &endptr);\
+          i += (endptr - nptr);\
+          reflection->Add##TYPE(message, descriptor, to_value);\
+          if(*endptr == ',')\
+          {\
+            ++i;\
+          }else if(*endptr == ']'){\
+            ++i;\
+            break;\
+          }else {\
+            FCOUT("不是一个有效的浮点数:%s", nptr);\
+            return false;\
+          }\
+        }\
       } else {\
-        FCOUT("不是一个有效的浮点数:%s", nptr);\
-        return false;\
+        char *nptr = data + i;\
+        char *endptr = NULL;\
+        CASTTYPE to_value = CVTF(nptr, &endptr);\
+        i += (endptr - nptr);\
+        reflection->Set##TYPE(message, descriptor, to_value);\
       }\
-    }\
-  } else {\
-    char *nptr = data + i;\
-    char *endptr = NULL;\
-    CASTTYPE to_value = CVTF(nptr, &endptr);\
-    i += (endptr - nptr);\
-    reflection->Set##TYPE(message, descriptor, to_value);\
-  }\
-} while (0)
+    } while (0)
 
 int JsonMessageCodec::FieldToJsonString(const Message &message, 
                                         const FieldDescriptor *field_descriptor, 
@@ -130,7 +142,9 @@ int JsonMessageCodec::FieldToJsonString(const Message &message,
   } else if(! reflection->HasField(message, field_descriptor)) {
     return 1;
   }
-  out += "\"" + field_descriptor->name() + "\":";  // output name
+  out += "\"";
+  out += field_descriptor->name();
+  out += "\":"; //output name
 
   switch (field_descriptor->type()) {
     case FieldDescriptor::TYPE_SFIXED64:
@@ -166,13 +180,17 @@ int JsonMessageCodec::FieldToJsonString(const Message &message,
           string value = reflection->GetRepeatedString(
               message, field_descriptor, i);
           boost::replace_all(value, "\"", "\\\"");
-          out += "\"" +  value +  "\"";
+          out += "\"";
+          out += value;
+          out += "\"";
         }
         out += "]";
       } else {
         string value = reflection->GetString(message, field_descriptor);
         boost::replace_all(value, "\"", "\\\"");
-        out += "\"" + value + "\"";
+        out += "\"";
+        out += value;
+        out += "\"";
       }
       break;
     }
@@ -213,25 +231,26 @@ int JsonMessageCodec::FieldToJsonString(const Message &message,
         for (; i < size - 1; ++i) {
           const EnumValueDescriptor* value = reflection->GetRepeatedEnum(
               message, field_descriptor, i);
-          out += lexical_cast<string>(value->index());
+          out += value->name();
           out += ",";
         }
         if (i == size - 1) {
           const EnumValueDescriptor* value = reflection->GetRepeatedEnum(
               message, field_descriptor, i);
-          out += lexical_cast<string>(value->index());
+          out += value->name();
         }
         out += "]";
       } else {
         const EnumValueDescriptor* value = reflection->GetEnum(
             message, field_descriptor);
-        out += "\"" + lexical_cast<string>(value->index()) + "\"";
+        out += "\"" + value->name() + "\"";
       }
       break;
     }
     case FieldDescriptor::TYPE_MESSAGE: {
       if (field_descriptor->label() != FieldDescriptor::LABEL_REPEATED) {
-        const Message &field_message = reflection->GetMessage(message, field_descriptor, NULL);
+        const Message &field_message = reflection->GetMessage(message,
+                                                              field_descriptor, NULL);
         ToJsonString(field_message, out);
       } else {
         out += "[";
@@ -304,7 +323,7 @@ bool JsonMessageCodec::FillFieldValue(char *data, int &i,
   if (data[i] != ':') {
     return false;
   }
-  ++i; // 跳过冒号
+  ++i;//跳过冒号
   switch (field_descriptor->type()) {
     case FieldDescriptor::TYPE_SFIXED64:
     case FieldDescriptor::TYPE_INT64:
@@ -330,12 +349,12 @@ bool JsonMessageCodec::FillFieldValue(char *data, int &i,
     case FieldDescriptor::TYPE_STRING: {
       if (field_descriptor->label() == FieldDescriptor::LABEL_REPEATED) {
         char *cur = data + i;
-        if (data[i] != '[') {  // 不是json数组
+        if (data[i] != '[') {/*不是json数组*/
           FCOUT("json字符串不是一个有效的数组:field_name=%s, json=%s",
                 field_descriptor->name().c_str(), data + i);
           return false;
         }
-        ++i;  // 跳过'['
+        ++i; /*跳过'['*/
         while (data[i]) {
           cur = data + i;
           char expect = data[i++];
@@ -346,7 +365,7 @@ bool JsonMessageCodec::FillFieldValue(char *data, int &i,
             FCOUT("字符串不是开始于引号: %s", cur);
             return false;
           }
-          char *vptr = data + i;  // begin str
+          char *vptr = data + i;//begin str
           while (data[i]) {
             if (data[i] == expect && data[i - 1] != '\\') {
               ++i;
@@ -378,7 +397,7 @@ bool JsonMessageCodec::FillFieldValue(char *data, int &i,
           FCOUT("字符串不是开始于引号: %s", cur);
           return false;
         }
-        char *vptr = data + i;  // begin str
+        char *vptr = data + i; //begin str
         while (data[i]) {
           if (data[i] == expect && data[i - 1] != '\\') {
             break;
@@ -392,7 +411,7 @@ bool JsonMessageCodec::FillFieldValue(char *data, int &i,
         string value(vptr, data + i - vptr);
         boost::replace_all(value, "\\\"", "\"");
         reflection->SetString(message, field_descriptor, value);
-        ++i;  // 跳过后引号
+        ++i; //跳过后引号
       }
       break;
     }
@@ -407,12 +426,12 @@ bool JsonMessageCodec::FillFieldValue(char *data, int &i,
     case FieldDescriptor::TYPE_BOOL:{
       if (field_descriptor->label() == FieldDescriptor::LABEL_REPEATED) {
         char *cur = data + i;
-        if (data[i] != '[') {  // 不是json数组
+        if (data[i] != '[') {/*不是json数组*/
           FCOUT("json字符串不是一个有效的数组:field_name=%s, json=%s",
                 field_descriptor->name().c_str(), data + i);
           return false;
         }
-        ++i;  // 跳过'['
+        ++i; /*跳过'['*/
         while (data[i]) {
           cur = data + i;
           bool value = false;
@@ -469,17 +488,19 @@ bool JsonMessageCodec::FillFieldValue(char *data, int &i,
         if (enum_value == NULL) {
           enum_value = enum_desc->FindValueByNumber(lexical_cast<int>(key));
           if(enum_value == NULL){
-            FCOUT("字段[%s]不存在枚举值[%s]", field_descriptor->name().c_str(), key.c_str());
+            FCOUT("字段[%s]不存在枚举值[%s]",
+                  field_descriptor->name().c_str(), key.c_str());
             return false;
           }
         }
         reflection->SetEnum(message, field_descriptor, enum_value);
       } else {
-        if (data[i] != '[') {  // 不是json数组
-          FCOUT("json字符串不是一个有效的数组:field_name=%s, json=%s", field_descriptor->name().c_str(), data + i);
+        if (data[i] != '[') {/*不是json数组*/
+          FCOUT("json字符串不是一个有效的数组:field_name=%s, json=%s",
+                field_descriptor->name().c_str(), data + i);
           return false;
         }
-        ++i; // 跳过'['
+        ++i; /*跳过'['*/
         while (data[i]) {
           char *kptr = data + i;
           while (LABEL_CHARS[static_cast<uint8_t>(data[i])]) {
@@ -491,7 +512,8 @@ bool JsonMessageCodec::FillFieldValue(char *data, int &i,
           if (enum_value == NULL) { 
             enum_value = enum_desc->FindValueByNumber(lexical_cast<int>(key));
             if(enum_value == NULL){
-              FCOUT("字段[%s]不存在枚举值[%s]", field_descriptor->name().c_str(), key.c_str());
+              FCOUT("字段[%s]不存在枚举值[%s]", 
+                    field_descriptor->name().c_str(), key.c_str());
               return false;
             }
 
@@ -507,19 +529,22 @@ bool JsonMessageCodec::FillFieldValue(char *data, int &i,
           }
         }
       }
+      } else {
+        char *cur = data + i;
       break;
     }
     case FieldDescriptor::TYPE_MESSAGE: {
       if (field_descriptor->label() != FieldDescriptor::LABEL_REPEATED) {
         Message* field_message = reflection->MutableMessage(message,
                                                             field_descriptor, NULL);
-        FromJsonObject(data, i, field_message);
+        return FromJsonObject(data, i, field_message);
       } else {
-        if (data[i] != '[') {  // 不是json数组
-          FCOUT("json字符串不是一个有效的数组:field_name=%s, json=%s", field_descriptor->name().c_str(), data + i);
+        if (data[i] != '[') {/*不是json数组*/
+          FCOUT("json字符串不是一个有效的数组:field_name=%s, json=%s", 
+                field_descriptor->name().c_str(), data + i);
           return false;
         }
-        ++i; // 跳过'['
+        ++i; /*跳过'['*/
         while (data[i]) {
           Message* field_message = reflection->AddMessage(
               message, field_descriptor, NULL);
@@ -539,7 +564,8 @@ bool JsonMessageCodec::FillFieldValue(char *data, int &i,
       break;
     }
     default:
-      FCOUT("字段[%s]是不支持的数据类型:%d", field_descriptor->name().c_str(), field_descriptor->type());
+      FCOUT("字段[%s]是不支持的数据类型:%d", 
+            field_descriptor->name().c_str(), field_descriptor->type());
   }
   return true;
 }
@@ -551,7 +577,7 @@ bool JsonMessageCodec::FromJsonObject(char *data, int &i, Message *message) {
   const Reflection* reflection = message->GetReflection();
   const Descriptor* descriptor = message->GetDescriptor();
   while (data[i]) {
-    // 循环各个字段
+    //循环各个字段
     if (data[i] == '\'' || data[i] == '"') {
       ++i;
     }
@@ -560,7 +586,11 @@ bool JsonMessageCodec::FromJsonObject(char *data, int &i, Message *message) {
       ++i;
     }
     string field_name(nptr, data + i - nptr );
-    if(field_name == ""){
+    if(field_name == "") {
+      if (data[i] == '}') {
+        // { }
+        i++;
+      }
       return true;
     }
     const FieldDescriptor* field_descriptor 
@@ -575,8 +605,12 @@ bool JsonMessageCodec::FromJsonObject(char *data, int &i, Message *message) {
       ++i;
     }
 
-    FillFieldValue(data, i, field_descriptor, reflection, message);
-    if (data[i++] == '}') {  // 跳过括号及逗号
+    if (!FillFieldValue(data, i, field_descriptor, reflection, message)) {
+      FCOUT("给pb字段赋值失败, 消息类型[%s], json_field_name:[%s]:%s",
+            descriptor->name().c_str(), field_name.c_str(), nptr);
+      return false;
+    }
+    if (data[i++] == '}') { //跳过括号及逗号
       break;
     }
 
@@ -601,7 +635,7 @@ outer:
       continue;
     }
     if (ch == '"' || ch == '\'') {
-      // string
+      //string
       *to++ = ch;
       char expect = ch;
       ++i;
@@ -616,7 +650,7 @@ outer:
         ++i;
       }
       if (i == size) {
-        // 引号不配对
+        //引号不配对
         return false;
       }
     } else if (ch == '[' || ch == '{') {
@@ -636,7 +670,7 @@ outer:
     ++i;
   }
   if (top != 0) {
-    // 括号不配对
+    //括号不配对
     return false;
   }
   return true;
@@ -751,7 +785,7 @@ outer:
       default: {
         result += ch;
       }
-    } // end switch
+    }//end switch
     ++i;
 
   } // end while
