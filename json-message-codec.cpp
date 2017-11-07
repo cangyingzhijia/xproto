@@ -26,7 +26,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "common/utility/lexical-cast.h"
-#include "tools/xproto/define.h"
+#include "xproto/define.h"
 
 namespace xproto {
 
